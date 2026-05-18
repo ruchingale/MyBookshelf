@@ -1,0 +1,88 @@
+# 🚀 QUICK START - Fix the Error NOW
+
+## Your Problem
+**Error:** "TypeError: Failed to fetch" when adding a book
+
+## Your Solution (3 MINUTES)
+
+### 1️⃣ OPEN SUPABASE
+```
+https://rrtjkyyqdpacigerkfin.supabase.co
+```
+
+### 2️⃣ GO TO SQL EDITOR
+**LEFT SIDEBAR → SQL Editor → New Query**
+
+### 3️⃣ COPY SQL
+Open file: `SUPABASE_SETUP.sql` from your project  
+**Ctrl+A → Ctrl+C** (copy all)
+
+### 4️⃣ PASTE IN SUPABASE
+Click in the editor and **Ctrl+V** (paste)
+
+### 5️⃣ RUN IT
+Click the green **Run** button  
+Look for: ✓ **executed successfully**
+
+### 6️⃣ VERIFY
+- **Table Editor:** See `books` table? ✓
+- **Storage:** See `covers` bucket (PUBLIC)? ✓
+
+### 7️⃣ REFRESH APP
+Go to: http://localhost:5173  
+Press: **F5** (refresh)
+
+### 8️⃣ TEST
+Click **+ Add Book**  
+Fill form  
+Click **Add Book**  
+**IT WORKS!** 🎉
+
+---
+
+## What Just Happened?
+
+| Step | What Supabase Created |
+|------|----------------------|
+| Run SQL | `books` table with columns for your library |
+| Run SQL | `covers` storage bucket for book images |
+| Run SQL | Security policies (RLS) for safety |
+
+---
+
+## Still Getting Error?
+
+```
+1. Did you see ✓ executed successfully? YES/NO
+2. Can you see "books" table in Table Editor? YES/NO
+3. Can you see "covers" bucket in Storage? YES/NO
+4. Did you refresh the app? YES/NO
+```
+
+If all YES → Try adding book again  
+If any NO → Redo the steps above  
+
+---
+
+## Debug Mode
+
+**Press F12 → Console Tab → Try adding book → See error?**
+
+Copy the error and we can troubleshoot together!
+
+---
+
+## Your Supabase Dashboard
+```
+URL: https://rrtjkyyqdpacigerkfin.supabase.co
+SQL File: SUPABASE_SETUP.sql (in your project folder)
+App URL: http://localhost:5173
+```
+
+---
+
+## That's It!
+
+**Do steps 1-8 now and your app will work!** ⚡
+
+Need help? See: `FIX_FETCH_ERROR.md` or `SUPABASE_DETAILED_GUIDE.md`
