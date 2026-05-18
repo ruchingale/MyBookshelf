@@ -17,16 +17,25 @@ export default function Library() {
   const [genre, setGenre] = useState('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(()=>{ fetchBooks() }, [])
+  useEffect(()=>{ 
+    console.log('📚 Library component mounted')
+    fetchBooks() 
+  }, [])
 
   async function fetchBooks(){
     setLoading(true)
+    console.log('🔄 Fetching books from Supabase...')
     try {
       const { data, error } = await supabase.from('books').select('*').order('created_at', {ascending:false})
-      if (error) throw error
+      if (error) {
+        console.error('❌ Supabase error:', error)
+        throw error
+      }
+      console.log('✅ Books fetched:', data?.length || 0, 'books')
       setBooks(data || [])
     } catch (err) {
-      console.error('Error fetching books:', err)
+      console.error('❌ Error fetching books:', err)
+      setBooks([])
     } finally {
       setLoading(false)
     }
