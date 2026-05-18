@@ -1,0 +1,111 @@
+# ⚡ VERCEL BLANK PAGE - 5 MINUTE FIX
+
+## 🎯 The Problem
+```
+✅ Local: Works perfectly (npm run dev)
+❌ Vercel: Shows blank page
+```
+
+## 🔧 The Solution
+Your app needs **environment variables** in Vercel. They're not in GitHub (security!), so Vercel doesn't have them.
+
+---
+
+## ✅ DO THIS RIGHT NOW
+
+### STEP 1: Open Vercel Dashboard
+```
+https://vercel.com/ruchingale/my-bookshelf
+```
+
+### STEP 2: Go to Settings
+```
+Click: Settings (top menu)
+Click: Environment Variables (left sidebar)
+```
+
+### STEP 3: Add FIRST Variable
+```
+Click: Add New
+
+Name: VITE_SUPABASE_URL
+Value: https://rrtjkyyqdpacigerkfln.supabase.co
+
+Check ALL boxes:
+  ✓ Production
+  ✓ Preview  
+  ✓ Development
+
+Click: Add
+```
+
+### STEP 4: Add SECOND Variable
+```
+Click: Add New
+
+Name: VITE_SUPABASE_ANON_KEY
+Value: sb_publishable_etfEdchPgxwrM5eKa9QurA_PZrMlrGq
+
+Check ALL boxes:
+  ✓ Production
+  ✓ Preview
+  ✓ Development
+
+Click: Add
+```
+
+### STEP 5: Redeploy
+```
+Click: Deployments (top menu)
+Click: ⋯ (three dots on latest deployment)
+Click: Redeploy
+Wait: 60 seconds
+```
+
+### STEP 6: Visit Your Site
+```
+Go to: https://my-bookshelf-eta.vercelapp.com
+Press: Ctrl+Shift+R (hard refresh)
+See: Your books! 🎉
+```
+
+---
+
+## ❌ If Still Blank
+
+**Option 1: Check variables were saved**
+- Settings → Environment Variables
+- Both `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` showing? ✓
+
+**Option 2: Check browser**
+- Press F12 → Console tab
+- Any red errors?
+
+**Option 3: Check Vercel build logs**
+- Deployments → Latest → Scroll to "Build Logs"
+- Any errors about `VITE_SUPABASE`?
+
+---
+
+## ✨ What Should Happen
+
+1. You add env variables ✓
+2. Vercel rebuilds the app ✓
+3. Env variables are "baked into" the JavaScript bundle ✓
+4. App loads and works everywhere ✓
+
+---
+
+## 📦 What I Fixed For You
+
+```
+✅ vercel.json - Better build config
+✅ vite.config.js - Production optimization
+✅ Pushed to GitHub - Vercel using new config
+```
+
+All you need to do is **add env variables** in Vercel dashboard!
+
+---
+
+**TLDR: Go to Vercel Settings → Environment Variables → Add the two VITE_* variables → Redeploy → Done! 🚀**
