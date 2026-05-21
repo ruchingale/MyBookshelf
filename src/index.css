@@ -18,8 +18,8 @@ html, body, #root {
 }
 
 body {
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-  color: var(--offwhite);
+  background: linear-gradient(135deg, #fff5f9 0%, #f5e6ff 100%);
+  color: #4a4a4a;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -32,7 +32,7 @@ input, select, textarea {
 }
 
 input[type="file"]::file-selector-button {
-  background: #8b5e3c;
+  background: #ff9cc5;
   color: white;
   border: none;
   padding: 6px 12px;
@@ -42,6 +42,6 @@ input[type="file"]::file-selector-button {
 }
 
 input[type="file"]::file-selector-button:hover {
-  background: #6b4423;
+  background: #ff85b5;
 }
 

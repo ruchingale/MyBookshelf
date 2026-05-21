@@ -42,15 +42,15 @@ function ShelfRow({ books, y, onClick }) {
       })}
       <mesh position={[0, y - 0.75, -0.05]} castShadow receiveShadow>
         <boxGeometry args={[shelfWidth + 0.6, 0.1, 0.6]} />
-        <meshStandardMaterial color={'#8B5E3C'} metalness={0.1} roughness={0.8} />
+        <meshStandardMaterial color={'#d9bfff'} metalness={0.1} roughness={0.8} />
       </mesh>
       <mesh position={[0, y - 0.75, -0.4]} castShadow>
         <boxGeometry args={[0.15, 1.2, 0.05]} />
-        <meshStandardMaterial color={'#6B4423'} />
+        <meshStandardMaterial color={'#c8a2e0'} />
       </mesh>
       <mesh position={[0, y - 0.75, 0.3]} castShadow>
         <boxGeometry args={[0.15, 1.2, 0.05]} />
-        <meshStandardMaterial color={'#6B4423'} />
+        <meshStandardMaterial color={'#c8a2e0'} />
       </mesh>
     </group>
   )
@@ -60,7 +60,7 @@ function BackWall() {
   return (
     <mesh position={[0, 0, -1]} receiveShadow>
       <planeGeometry args={[10, 8]} />
-      <meshStandardMaterial color={'#1a1a1a'} />
+      <meshStandardMaterial color={'#fff5f9'} />
     </mesh>
   )
 }
@@ -74,7 +74,7 @@ export default function BookShelf3D({ books, onBookClick }) {
   }, [books])
 
   return (
-    <div className="w-full h-[700px] rounded-xl overflow-hidden border border-white/10">
+    <div className="w-full h-[700px] rounded-xl overflow-hidden border border-pink-300 shadow-lg">
       <Canvas shadows camera={{ position: [0, 2, 6], fov: 40 }}>
         <ambientLight intensity={0.5} />
         <directionalLight 
