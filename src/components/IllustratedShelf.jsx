@@ -20,28 +20,47 @@ function getDecoration(genre) {
   return DECORATIONS[idx]
 }
 
-export default function IllustratedShelf({ genre, books, onBookClick }) {
+// Empty slot placeholder — faint dashed lavender rectangle, same size as a book spine
+function EmptySlot() {
+  return (
+    <div
+      style={{
+        width: '60px',
+        height: '100px',
+        border: '2px dashed #d8b4fe',
+        borderRadius: '8px',
+        opacity: 0.3,
+        flexShrink: 0,
+      }}
+    />
+  )
+}
+
+const PLANKS_PER_UNIT = 4
+const BOOKS_PER_PLANK = 4
+
+export default function IllustratedShelf({ genre, books, unitIndex = 0, onBookClick }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `shelf-${genre}`,
+    id: `shelf-${genre}-${unitIndex}`,
     data: { type: 'shelf', genre },
   })
 
-  const planks = Math.max(1, Math.ceil(books.length / 4))
   const icon = GENRE_ICONS[genre] || '🌸'
   const deco = getDecoration(genre)
 
   const shelfStyle = {
     background: 'linear-gradient(145deg, #fdf4ff 0%, #f8edff 100%)',
-    border: '2px solid #c9b8f0',
+    border: isOver ? '2px solid #a855f7' : '2px solid #c9b8f0',
     borderRadius: '16px',
     padding: '0 0 12px 0',
     boxShadow: isOver
       ? '0 8px 32px rgba(180,120,255,0.35), 0 0 0 3px #c9b8f0'
       : '0 4px 20px rgba(160,100,220,0.15), 0 2px 8px rgba(0,0,0,0.08)',
-    transition: 'box-shadow 0.2s ease',
+    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
     position: 'relative',
     overflow: 'visible',
-    minHeight: '180px',
+    // Fixed height: header ~52px + (4 planks × ~138px each) + gaps + bottom padding
+    // We let it be determined by the fixed 4-plank layout naturally
   }
 
   const headerStyle = {
@@ -72,7 +91,7 @@ export default function IllustratedShelf({ genre, books, onBookClick }) {
     display: 'flex',
     alignItems: 'flex-end',
     gap: '8px',
-    minHeight: '120px',
+    height: '120px',
     position: 'relative',
     overflow: 'visible',
     boxShadow: 'inset 0 -3px 0 rgba(160,120,210,0.25), 0 2px 4px rgba(0,0,0,0.06)',
@@ -87,20 +106,6 @@ export default function IllustratedShelf({ genre, books, onBookClick }) {
     height: '6px',
     background: 'linear-gradient(180deg, #c9b8f0 0%, #b8a0e0 100%)',
     borderRadius: '0 0 4px 4px',
-  }
-
-  const emptyPlankStyle = {
-    ...plankStyle,
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.6,
-  }
-
-  const emptyLabel = {
-    fontFamily: "'Nunito', sans-serif",
-    fontSize: '11px',
-    color: '#b09ad0',
-    fontStyle: 'italic',
   }
 
   return (
@@ -120,37 +125,33 @@ export default function IllustratedShelf({ genre, books, onBookClick }) {
         {deco}
       </span>
 
-      {/* Genre header */}
+      {/* Genre header — always shows plain genre name, no unit numbering */}
       <div style={headerStyle}>
         <span style={{ fontSize: '18px' }}>{icon}</span>
         <span style={genreLabelStyle}>{genre}</span>
       </div>
 
-      {/* Shelf planks */}
+      {/* Always exactly PLANKS_PER_UNIT planks, each with exactly BOOKS_PER_PLANK slots */}
       <div style={{ padding: '10px 0 0 0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {Array.from({ length: planks }).map((_, plankIdx) => {
-          const plankBooks = books.slice(plankIdx * 4, plankIdx * 4 + 4)
+        {Array.from({ length: PLANKS_PER_UNIT }).map((_, plankIdx) => {
+          const slotStart = plankIdx * BOOKS_PER_PLANK
+          const plankBooks = books.slice(slotStart, slotStart + BOOKS_PER_PLANK)
+          const emptySlots = BOOKS_PER_PLANK - plankBooks.length
+
           return (
-            <div key={plankIdx} style={plankBooks.length === 0 ? emptyPlankStyle : plankStyle}>
-              {plankBooks.length === 0 ? (
-                <span style={emptyLabel}>empty shelf…</span>
-              ) : (
-                plankBooks.map((book) => (
-                  <BookSpine key={book.id} book={book} onClick={onBookClick} />
-                ))
-              )}
+            <div key={plankIdx} style={plankStyle}>
+              {/* Filled book slots */}
+              {plankBooks.map((book) => (
+                <BookSpine key={book.id} book={book} onClick={onBookClick} />
+              ))}
+              {/* Empty placeholder slots to fill remainder of plank */}
+              {Array.from({ length: emptySlots }).map((_, i) => (
+                <EmptySlot key={`empty-${plankIdx}-${i}`} />
+              ))}
               <div style={plankLedgeStyle} />
             </div>
           )
         })}
-
-        {/* Show an extra drop plank when dragging over and all existing planks are full */}
-        {isOver && books.length % 4 === 0 && (
-          <div style={{ ...plankStyle, border: '2px dashed #b89cd8', opacity: 0.7 }}>
-            <span style={emptyLabel}>drop here ✨</span>
-            <div style={plankLedgeStyle} />
-          </div>
-        )}
       </div>
     </div>
   )

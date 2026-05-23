@@ -87,8 +87,34 @@ export default function Library() {
     if (!booksByGenre[g]) booksByGenre[g] = []
     booksByGenre[g].push(book)
   }
-  // Only show genres that have books
-  const activeGenres = Object.entries(booksByGenre).filter(([, bks]) => bks.length > 0)
+
+  // Sort each genre's books: sort_order ASC, then created_at ASC
+  for (const g of Object.keys(booksByGenre)) {
+    booksByGenre[g].sort((a, b) => {
+      const soA = a.sort_order ?? Infinity
+      const soB = b.sort_order ?? Infinity
+      if (soA !== soB) return soA - soB
+      return new Date(a.created_at) - new Date(b.created_at)
+    })
+  }
+
+  // Build shelfUnits: sort genres by total book count desc, then split into chunks of 16
+  const BOOKS_PER_UNIT = 16
+  const genresSortedByCount = Object.entries(booksByGenre)
+    .filter(([, bks]) => bks.length > 0)
+    .sort(([, a], [, b]) => b.length - a.length)
+
+  const shelfUnits = []
+  for (const [genreName, genreBooks] of genresSortedByCount) {
+    const totalChunks = Math.max(1, Math.ceil(genreBooks.length / BOOKS_PER_UNIT))
+    for (let i = 0; i < totalChunks; i++) {
+      shelfUnits.push({
+        genre: genreName,
+        books: genreBooks.slice(i * BOOKS_PER_UNIT, (i + 1) * BOOKS_PER_UNIT),
+        unitIndex: i,
+      })
+    }
+  }
 
   function handleDragEnd(event) {
     const { active, over } = event
@@ -311,11 +337,12 @@ export default function Library() {
                 </div>
               ) : (
                 <div className="shelf-grid">
-                  {activeGenres.map(([genreName, genreBooks]) => (
+                  {shelfUnits.map(({ genre: genreName, books: unitBooks, unitIndex }) => (
                     <IllustratedShelf
-                      key={genreName}
+                      key={`${genreName}-${unitIndex}`}
                       genre={genreName}
-                      books={genreBooks}
+                      books={unitBooks}
+                      unitIndex={unitIndex}
                       onBookClick={(book) => setSelected(book)}
                     />
                   ))}
