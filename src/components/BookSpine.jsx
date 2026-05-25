@@ -1,4 +1,4 @@
-import { useDraggable } from '@dnd-kit/core'
+import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useState } from 'react'
 
@@ -36,12 +36,37 @@ function hashTitle(title) {
   return Math.abs(h)
 }
 
+// Empty slot placeholder — shown at original drag position
+function EmptySlotPlaceholder({ inBasket }) {
+  return (
+    <div
+      style={{
+        width: inBasket ? '28px' : '90px',
+        height: inBasket ? '44px' : '130px',
+        border: '2px dashed #d8b4fe',
+        borderRadius: '8px',
+        opacity: 0.5,
+        flexShrink: 0,
+        background: 'rgba(216,180,254,0.08)',
+        transition: 'all 0.2s ease',
+      }}
+    />
+  )
+}
+
 export default function BookSpine({ book, onClick, inBasket = false }) {
   const [hovered, setHovered] = useState(false)
 
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: book.id,
-    data: { book, sourceType: inBasket ? 'basket' : 'shelf' },
+    data: { book, sourceType: inBasket ? 'basket' : 'shelf', genre: book.genre },
   })
 
   const colorIdx = hashTitle(book.title || '') % SPINE_COLORS.length
@@ -50,32 +75,36 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
   const hasCover = !!book.cover_url
   const statusInfo = STATUS_COLORS[book.status] || STATUS_COLORS.want_to_read
 
-  const spineStyle = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.4 : 1,
-    cursor: isDragging ? 'grabbing' : 'grab',
+  // While dragging this card, show the empty-slot placeholder at original position
+  if (isDragging) {
+    return <EmptySlotPlaceholder inBasket={inBasket} />
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || 'transform 0.2s ease',
+    opacity: 1,
+    cursor: hovered ? 'grab' : 'grab',
     background: hasCover && !inBasket
       ? 'transparent'
       : `linear-gradient(180deg, ${c1} 0%, ${c2} 100%)`,
-    width: inBasket ? '28px' : '60px',
-    height: inBasket ? '44px' : '100px',
+    width: inBasket ? '28px' : '90px',
+    height: inBasket ? '44px' : '130px',
     borderRadius: '8px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: hasCover && !inBasket ? 'flex-end' : 'space-between',
     padding: inBasket ? '3px 2px' : '0',
-    boxShadow: isDragging
-      ? '0 16px 32px rgba(0,0,0,0.3)'
-      : hovered && !inBasket
-      ? '4px 16px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.4)'
-      : '2px 4px 10px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)',
+    boxShadow:
+      hovered && !inBasket
+        ? '4px 16px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.4)'
+        : '2px 4px 10px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)',
     border: '1px solid rgba(255,255,255,0.4)',
     position: 'relative',
     flexShrink: 0,
-    transition: isDragging ? 'none' : 'transform 0.18s ease, box-shadow 0.18s ease',
     userSelect: 'none',
-    zIndex: isDragging ? 9999 : hovered ? 50 : 1,
+    zIndex: hovered ? 50 : 1,
     overflow: 'visible',
   }
 
@@ -134,13 +163,12 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
     position: 'relative',
   }
 
-  // Hover preview popup (only on shelf, not in basket, not dragging)
-  const showPreview = hovered && !inBasket && !isDragging
+  const showPreview = hovered && !inBasket
 
   return (
     <div
       ref={setNodeRef}
-      style={spineStyle}
+      style={style}
       {...listeners}
       {...attributes}
       onMouseEnter={() => setHovered(true)}
@@ -157,7 +185,6 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
       {hasCover && !inBasket ? (
         <>
           <img src={book.cover_url} alt={book.title} style={coverImgStyle} draggable={false} />
-          {/* Title overlay at bottom */}
           <div style={titleOverlayStyle}>
             {book.title.length > 22 ? book.title.slice(0, 22) + '…' : book.title}
           </div>
@@ -194,7 +221,6 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
             animation: 'popupFadeIn 0.15s ease',
           }}
         >
-          {/* Cover image in popup */}
           {hasCover ? (
             <div style={{ width: '100%', height: '160px', overflow: 'hidden' }}>
               <img
@@ -218,7 +244,6 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
             </div>
           )}
 
-          {/* Info below image */}
           <div style={{ padding: '10px 10px 8px' }}>
             <p style={{
               fontFamily: "'Nunito', sans-serif",
@@ -259,7 +284,6 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
             </div>
           </div>
 
-          {/* Hint */}
           <div style={{
             background: 'rgba(199,125,255,0.08)',
             padding: '5px 10px',
@@ -272,7 +296,7 @@ export default function BookSpine({ book, onClick, inBasket = false }) {
               margin: 0,
               textAlign: 'center',
             }}>
-              click to open · drag to basket
+              click to open · drag to reorder
             </p>
           </div>
 

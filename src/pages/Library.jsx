@@ -1,5 +1,13 @@
-import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { useEffect, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { arrayMove } from '@dnd-kit/sortable'
+import { useEffect, useRef, useState } from 'react'
 import AddBookModal from '../components/AddBookModal'
 import BookCard from '../components/BookCard'
 import BookDetailModal from '../components/BookDetailModal'
@@ -9,6 +17,7 @@ import IllustratedShelf from '../components/IllustratedShelf'
 import { supabase } from '../lib/supabase'
 
 const GENRES = ['Fiction','Non-Fiction','Sci-Fi','Fantasy','Mystery','Biography','History','Self-Help','Other']
+const BOOKS_PER_UNIT = 16
 
 const normalizeGenre = (value) =>
   String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -21,6 +30,81 @@ const normalizeStatus = (value) => {
   return status
 }
 
+// Overlay card shown following the cursor while dragging
+function DragOverlayCard({ book }) {
+  const GENRE_ICONS = {
+    'Fiction': '📖', 'Non-Fiction': '🔬', 'Sci-Fi': '🚀', 'Fantasy': '✨',
+    'Mystery': '🔍', 'Biography': '👤', 'History': '🏛️', 'Self-Help': '💪', 'Other': '🌸',
+  }
+  const SPINE_COLORS = [
+    ['#ff9ec4', '#ff6ea0'], ['#b8a8f8', '#9b87f5'], ['#88ddb0', '#5cc48a'],
+    ['#85c4f8', '#52a8f5'], ['#ffc585', '#ff9f45'],
+  ]
+  function hashTitle(t) {
+    let h = 0
+    for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0
+    return Math.abs(h)
+  }
+  const colorIdx = hashTitle(book.title || '') % SPINE_COLORS.length
+  const [c1, c2] = SPINE_COLORS[colorIdx]
+  const icon = GENRE_ICONS[book.genre] || '🌸'
+  const hasCover = !!book.cover_url
+
+  return (
+    <div style={{
+      width: '90px',
+      height: '130px',
+      borderRadius: '10px',
+      background: hasCover ? 'transparent' : `linear-gradient(180deg, ${c1} 0%, ${c2} 100%)`,
+      boxShadow: '0 20px 50px rgba(0,0,0,0.35), 0 8px 20px rgba(199,125,255,0.3)',
+      transform: 'scale(1.05)',
+      cursor: 'grabbing',
+      border: '2px solid rgba(255,255,255,0.6)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: hasCover ? 'flex-end' : 'space-between',
+      position: 'relative',
+      overflow: 'hidden',
+      userSelect: 'none',
+    }}>
+      {hasCover ? (
+        <>
+          <img
+            src={book.cover_url}
+            alt={book.title}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }}
+            draggable={false}
+          />
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.65))',
+            borderRadius: '0 0 8px 8px',
+            padding: '18px 4px 5px',
+            fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,0.95)',
+            textAlign: 'center', fontFamily: "'Nunito', sans-serif",
+          }}>
+            {book.title.length > 22 ? book.title.slice(0, 22) + '…' : book.title}
+          </div>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: '16px', padding: '8px 0 0', zIndex: 2 }}>{icon}</span>
+          <span style={{
+            fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.95)',
+            textAlign: 'center', lineHeight: 1.1, wordBreak: 'break-word',
+            overflow: 'hidden', maxHeight: '68px',
+            fontFamily: "'Nunito', sans-serif", padding: '0 4px',
+          }}>
+            {book.title.length > 28 ? book.title.slice(0, 28) + '…' : book.title}
+          </span>
+          <div style={{ height: '8px' }} />
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Library() {
   const [books, setBooks] = useState([])
   const [basketBooks, setBasketBooks] = useState([])
@@ -30,7 +114,11 @@ export default function Library() {
   const [genre, setGenre] = useState('')
   const [loading, setLoading] = useState(true)
   const [preSelectedGenre, setPreSelectedGenre] = useState('')
-  const [viewMode, setViewMode] = useState('shelf') // 'shelf' | 'covers'
+  const [viewMode, setViewMode] = useState('shelf')
+  const [activeBook, setActiveBook] = useState(null) // book being dragged (for overlay)
+
+  // Track pending Supabase syncs so rapid drags don't cause race conditions
+  const syncTimeout = useRef(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -41,7 +129,11 @@ export default function Library() {
   async function fetchBooks() {
     setLoading(true)
     try {
-      const { data, error } = await supabase.from('books').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase
+        .from('books')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
       if (error) throw error
       setBooks(data || [])
     } catch (err) {
@@ -65,11 +157,12 @@ export default function Library() {
     setBasketBooks((s) => s.filter((b) => b.id !== bookId))
   }
 
-  // Books currently in basket (by id set)
+  // ─── Derived state ──────────────────────────────────────────────────────────
+
   const basketIds = new Set(basketBooks.map((b) => b.id))
 
   const filtered = books.filter((b) => {
-    if (basketIds.has(b.id)) return false // hide basket books from shelves
+    if (basketIds.has(b.id)) return false
     const bookStatus = normalizeStatus(b.status)
     const bookGenre = normalizeGenre(b.genre)
     const activeFilter = normalizeStatus(filter)
@@ -79,7 +172,7 @@ export default function Library() {
     return true
   })
 
-  // Group by genre — maintain GENRES order, append unknown genres at end
+  // Group by genre, maintain GENRES order
   const booksByGenre = {}
   for (const g of GENRES) booksByGenre[g] = []
   for (const book of filtered) {
@@ -98,8 +191,7 @@ export default function Library() {
     })
   }
 
-  // Build shelfUnits: sort genres by total book count desc, then split into chunks of 16
-  const BOOKS_PER_UNIT = 16
+  // Build shelfUnits: sort genres by total book count desc, split into chunks of 16
   const genresSortedByCount = Object.entries(booksByGenre)
     .filter(([, bks]) => bks.length > 0)
     .sort(([, a], [, b]) => b.length - a.length)
@@ -111,30 +203,176 @@ export default function Library() {
       shelfUnits.push({
         genre: genreName,
         books: genreBooks.slice(i * BOOKS_PER_UNIT, (i + 1) * BOOKS_PER_UNIT),
+        allGenreBooks: genreBooks,  // full genre list for SortableContext
         unitIndex: i,
       })
     }
   }
 
+  // ─── Drag handlers ───────────────────────────────────────────────────────────
+
+  function handleDragStart(event) {
+    const { active } = event
+    const draggedBook = books.find((b) => b.id === active.id)
+    setActiveBook(draggedBook || null)
+    document.body.classList.add('dragging-active')
+  }
+
+  function handleDragCancel() {
+    setActiveBook(null)
+    document.body.classList.remove('dragging-active')
+  }
+
   function handleDragEnd(event) {
+    document.body.classList.remove('dragging-active')
     const { active, over } = event
-    if (!over) return
+    setActiveBook(null)
+
+    if (!over) return // dropped outside — snap back (dnd-kit handles this)
 
     const draggedId = active.id
     const sourceType = active.data.current?.sourceType
-    const targetType = over.data.current?.type
+    const overType = over.data.current?.type     // 'shelf' or 'basket' (droppable zones)
+    const overSortable = over.data.current?.sortable // present when over a sortable item
 
-    if (sourceType === 'shelf' && targetType === 'basket') {
-      // Move book from shelf to basket
+    // ── Basket interactions (unchanged) ──────────────────────────────────────
+    if (sourceType === 'shelf' && overType === 'basket') {
       const book = books.find((b) => b.id === draggedId)
       if (book && !basketIds.has(draggedId)) {
         setBasketBooks((prev) => [...prev, book])
       }
-    } else if (sourceType === 'basket' && targetType === 'shelf') {
-      // Return book from basket to shelf display
+      return
+    }
+    if (sourceType === 'basket' && overType === 'shelf') {
       setBasketBooks((prev) => prev.filter((b) => b.id !== draggedId))
-    } else if (sourceType === 'basket' && targetType === 'basket') {
-      // Dropped basket book on basket — do nothing
+      return
+    }
+    if (sourceType === 'basket' && overType === 'basket') return
+
+    // ── Shelf drag ────────────────────────────────────────────────────────────
+    if (sourceType !== 'shelf') return
+
+    const draggedBook = books.find((b) => b.id === draggedId)
+    if (!draggedBook) return
+
+    const draggedGenre = draggedBook.genre || 'Other'
+
+    // Determine target genre:
+    // • If dropped on a sortable book → use that book's genre
+    // • If dropped on a droppable shelf zone → use that shelf's genre
+    let targetGenre = null
+    if (over.data.current?.book) {
+      // Over a sortable book item
+      targetGenre = over.data.current.book.genre || 'Other'
+    } else if (overType === 'shelf') {
+      // Over an empty shelf zone
+      targetGenre = over.data.current.genre
+    } else {
+      // Fallback: same genre (reorder within)
+      targetGenre = draggedGenre
+    }
+
+    if (!targetGenre) return
+
+    const isCrossGenre = normalizeGenre(draggedGenre) !== normalizeGenre(targetGenre)
+
+    setBooks((prevBooks) => {
+      let updated = [...prevBooks]
+
+      if (isCrossGenre) {
+        // ── Cross-genre: change genre, append at end of target ──────────────
+        // Find the end sort_order for target genre
+        const targetBooks = updated.filter(
+          (b) => normalizeGenre(b.genre || 'Other') === normalizeGenre(targetGenre) && !basketIds.has(b.id)
+        )
+        const maxOrder = targetBooks.length
+        updated = updated.map((b) =>
+          b.id === draggedId
+            ? { ...b, genre: targetGenre, sort_order: maxOrder }
+            : b
+        )
+        // Re-number target genre
+        const reTargetBooks = updated
+          .filter((b) => normalizeGenre(b.genre || 'Other') === normalizeGenre(targetGenre) && !basketIds.has(b.id))
+          .sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
+        reTargetBooks.forEach((b, i) => {
+          const idx = updated.findIndex((u) => u.id === b.id)
+          if (idx !== -1) updated[idx] = { ...updated[idx], sort_order: i }
+        })
+        // Re-number source genre
+        const reSrcBooks = updated
+          .filter((b) => normalizeGenre(b.genre || 'Other') === normalizeGenre(draggedGenre) && !basketIds.has(b.id))
+          .sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
+        reSrcBooks.forEach((b, i) => {
+          const idx = updated.findIndex((u) => u.id === b.id)
+          if (idx !== -1) updated[idx] = { ...updated[idx], sort_order: i }
+        })
+      } else {
+        // ── Same genre: reorder ───────────────────────────────────────────────
+        // Build sorted genre list
+        const genreBooks = updated
+          .filter((b) => normalizeGenre(b.genre || 'Other') === normalizeGenre(draggedGenre) && !basketIds.has(b.id))
+          .sort((a, b) => (a.sort_order ?? Infinity) - (b.sort_order ?? Infinity))
+
+        const oldIndex = genreBooks.findIndex((b) => b.id === draggedId)
+        const newIndex = genreBooks.findIndex((b) => b.id === over.id)
+
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prevBooks
+
+        const reordered = arrayMove(genreBooks, oldIndex, newIndex)
+
+        // Re-number and write back
+        reordered.forEach((b, i) => {
+          const idx = updated.findIndex((u) => u.id === b.id)
+          if (idx !== -1) updated[idx] = { ...updated[idx], sort_order: i }
+        })
+      }
+
+      // ── Background Supabase sync ─────────────────────────────────────────
+      scheduleSyncBooks(updated, draggedId, draggedGenre, targetGenre, isCrossGenre)
+
+      return updated
+    })
+  }
+
+  function scheduleSyncBooks(updatedBooks, draggedId, srcGenre, targetGenre, isCrossGenre) {
+    // Debounce: cancel pending sync, schedule a new one
+    if (syncTimeout.current) clearTimeout(syncTimeout.current)
+    syncTimeout.current = setTimeout(() => {
+      syncBooksToSupabase(updatedBooks, draggedId, srcGenre, targetGenre, isCrossGenre)
+    }, 300)
+  }
+
+  async function syncBooksToSupabase(updatedBooks, draggedId, srcGenre, targetGenre, isCrossGenre) {
+    try {
+      const genresToSync = isCrossGenre
+        ? [normalizeGenre(srcGenre), normalizeGenre(targetGenre)]
+        : [normalizeGenre(srcGenre)]
+
+      // Collect affected books (those in the affected genres)
+      const affectedBooks = updatedBooks.filter(
+        (b) => genresToSync.includes(normalizeGenre(b.genre || 'Other')) && !basketIds.has(b.id)
+      )
+
+      // Batch update each affected book's sort_order (and genre if cross-genre)
+      const updates = affectedBooks.map((b) => ({
+        id: b.id,
+        sort_order: b.sort_order ?? 0,
+        genre: b.genre,
+      }))
+
+      // Supabase doesn't support true batch upsert with different values per row
+      // in a single call without a stored procedure, so we fire concurrent updates
+      await Promise.all(
+        updates.map(({ id, sort_order, genre }) =>
+          supabase
+            .from('books')
+            .update({ sort_order, genre })
+            .eq('id', id)
+        )
+      )
+    } catch (err) {
+      console.error('Error syncing sort order to Supabase:', err)
     }
   }
 
@@ -142,22 +380,29 @@ export default function Library() {
     setBasketBooks((prev) => prev.filter((b) => b.id !== book.id))
   }
 
+  // ─── Styles ──────────────────────────────────────────────────────────────────
+
   const pageStyle = {
     minHeight: '100vh',
     background: 'linear-gradient(135deg, #f3e8ff 0%, #fce4ec 100%)',
     position: 'relative',
   }
 
-  const containerStyle = {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '0 24px 140px',
-    position: 'relative',
-    zIndex: 1,
+  // Full-width sticky header — lives outside the content container
+  const stickyHeaderStyle = {
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    width: '100%',
+    background: 'rgba(255,255,255,0.62)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    borderBottom: '1px solid rgba(255,255,255,0.85)',
+    boxShadow: '0 2px 16px rgba(199,125,255,0.10)',
   }
 
-  const headerStyle = {
-    padding: '28px 0 20px',
+  const headerInnerStyle = {
+    padding: '16px 32px',
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
@@ -166,9 +411,18 @@ export default function Library() {
     gap: '16px',
   }
 
+  // Full-width scrollable content below sticky header
+  const containerStyle = {
+    width: '100%',
+    padding: '0 32px 140px',
+    position: 'relative',
+    zIndex: 1,
+    boxSizing: 'border-box',
+  }
+
   const titleStyle = {
     fontFamily: "'Pacifico', cursive",
-    fontSize: '38px',
+    fontSize: '36px',
     background: 'linear-gradient(135deg, #c77dff 0%, #e879a0 100%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
@@ -182,12 +436,12 @@ export default function Library() {
     fontFamily: "'Nunito', sans-serif",
     fontSize: '13px',
     color: '#c084d0',
-    margin: '4px 0 0',
+    margin: '3px 0 0',
     letterSpacing: '0.04em',
   }
 
   const btnPrimary = {
-    padding: '9px 20px',
+    padding: '9px 22px',
     borderRadius: '12px',
     background: 'linear-gradient(135deg, #e879a0 0%, #c77dff 100%)',
     color: 'white',
@@ -216,10 +470,17 @@ export default function Library() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
       <div style={pageStyle}>
-        <div style={containerStyle}>
-          <header style={headerStyle}>
+        {/* ── Sticky frosted-glass header ── */}
+        <header style={stickyHeaderStyle}>
+          <div style={headerInnerStyle}>
             <div>
               <h1 style={titleStyle}>📚 MyShelf</h1>
               <p style={subtitleStyle}>✨ your cozy personal library ✨</p>
@@ -290,8 +551,11 @@ export default function Library() {
                 🔄 Refresh
               </button>
             </div>
-          </header>
+          </div>
+        </header>
 
+        {/* ── Scrollable content ── */}
+        <div style={containerStyle}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '80px 0' }}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>📖</div>
@@ -337,11 +601,12 @@ export default function Library() {
                 </div>
               ) : (
                 <div className="shelf-grid">
-                  {shelfUnits.map(({ genre: genreName, books: unitBooks, unitIndex }) => (
+                  {shelfUnits.map(({ genre: genreName, books: unitBooks, allGenreBooks, unitIndex }) => (
                     <IllustratedShelf
                       key={`${genreName}-${unitIndex}`}
                       genre={genreName}
                       books={unitBooks}
+                      allGenreBooks={allGenreBooks}
                       unitIndex={unitIndex}
                       onBookClick={(book) => setSelected(book)}
                     />
@@ -350,7 +615,7 @@ export default function Library() {
               )}
             </>
           )}
-        </div>
+        </div>{/* end containerStyle */}
 
         <FloatingBasket
           books={basketBooks}
@@ -371,6 +636,14 @@ export default function Library() {
           onUpdated={handleUpdated}
         />
       </div>
+
+      {/* Drag overlay — full-opacity book spine following cursor */}
+      <DragOverlay dropAnimation={{
+        duration: 200,
+        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+      }}>
+        {activeBook ? <DragOverlayCard book={activeBook} /> : null}
+      </DragOverlay>
     </DndContext>
   )
 }
